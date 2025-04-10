@@ -1,0 +1,9 @@
+ray==2.44.1
+torch==2.6.0
+numpy==2.2.4
+matplotlib==3.10.0
+pandas==2.2.3
+ipython==9.1.0
+ipykernel==6.29.5
+kfp==2.12.1
+pyarrow==19.0.1
