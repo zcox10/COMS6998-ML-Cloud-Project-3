@@ -85,3 +85,20 @@ kubectl port-forward -n kubeflow svc/ml-pipeline-ui 8080:80
 ```
 
 Then, visit `http://localhost:8080`. You should see no errors.
+
+## 3. Run the pipeline
+
+First, compile the Dockerfile with the following commands:
+
+```bash
+docker buildx create --use   # (run once per machine to enable buildx)
+
+docker buildx build \
+  --platform linux/amd64 \
+  -t gcr.io/zsc-personal/ml-cloud-pipeline:latest \
+  --push .
+```
+
+You must ensure that the Kubernetes Service Account has the role: `roles/storage.objectViewer` in order to pull images from GCR.
+
+Once you have confirmed that the Kubernetes cluster is working and you are able to access Kubeflow via the UI on localhost, you can run the pipeline. Simply run: `python generate_pipeline_yaml.py` to generate the pipeline YAML file.  

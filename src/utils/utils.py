@@ -1,6 +1,6 @@
-from utils.dataset_utils import DatasetUtils
-from utils.generic_utils import GenericUtils
-from utils.model_utils import ModelUtils
+from ..utils.dataset_utils import DatasetUtils
+from ..utils.generic_utils import GenericUtils
+from ..utils.model_utils import ModelUtils
 
 
 class Utils:
@@ -10,6 +10,9 @@ class Utils:
         self.model_utils = ModelUtils()
 
     # GenericUtils
+    def configure_component_logging(self, log_level):
+        self.generic_utils.configure_component_logging(log_level)
+
     def set_seed(self, seed=10):
         self.generic_utils.set_seed(seed)
 

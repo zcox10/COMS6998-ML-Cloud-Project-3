@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from robot.geometry import rot
+from src.robot.geometry import rot
 
 
 # Plotting positions and velocities of data samples

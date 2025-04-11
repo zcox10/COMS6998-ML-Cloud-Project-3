@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from ..robot.arm_dynamics_base import ArmDynamicsBase
+from src.robot.arm_dynamics_base import ArmDynamicsBase
 from utils.utils import Utils
 
 

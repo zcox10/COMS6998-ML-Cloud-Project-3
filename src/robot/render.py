@@ -4,7 +4,7 @@ import matplotlib.lines as mlines
 import time
 from IPython.display import display, clear_output
 
-from robot.geometry import rot
+from src.robot.geometry import rot
 
 
 class Renderer(object):

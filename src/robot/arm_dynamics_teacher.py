@@ -1,6 +1,6 @@
-from robot.arm_dynamics_base import ArmDynamicsBase
 import numpy as np
-from robot.geometry import rot, xaxis, yaxis
+from src.robot.arm_dynamics_base import ArmDynamicsBase
+from src.robot.geometry import rot, xaxis, yaxis
 
 
 class ArmDynamicsTeacher(ArmDynamicsBase):

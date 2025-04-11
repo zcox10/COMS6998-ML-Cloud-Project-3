@@ -6,12 +6,21 @@ import glob
 import ast
 import numpy as np
 import pandas as pd
+import logging
 from IPython.display import Image, display
 
 
 class GenericUtils:
     def __init__(self):
         pass
+
+    def configure_component_logging(self, log_level):
+        """
+        Configure logging according to an associated log_level.
+        """
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+        logging.basicConfig(level=log_level, format="\n%(levelname)s: %(message)s\n")
 
     def set_seed(self, seed):
         """

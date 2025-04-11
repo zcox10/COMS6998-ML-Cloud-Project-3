@@ -1,13 +1,12 @@
 import numpy as np
 import argparse
 import time
-import torch
 import math
 from math import pi
 import os
 from datetime import datetime
 
-from robot.arm_dynamics_teacher import ArmDynamicsTeacher
+from src.robot.arm_dynamics_teacher import ArmDynamicsTeacher
 from src.robot.robot import Robot
 from src.robot.render import Renderer
 
@@ -96,7 +95,7 @@ def get_goal(radius, angle):
     return radius * np.array([np.cos(angle), np.sin(angle)]).reshape(-1, 1)
 
 
-def score_mpc_learnt_dynamics(controller, arm_student, model_path, gui):
+def score_mpc_learnt_dynamics(controller, arm_student, model_path, device, gui):
     args, unknown = get_args()
     GOALS = {
         1: [get_goal(1, 0.4), get_goal(1, -0.75)],
@@ -142,7 +141,7 @@ def score_mpc_learnt_dynamics(controller, arm_student, model_path, gui):
             print(f"model not found at {model_path}, skipping tests")
             continue
         try:
-            dynamics.init_model(model_path, num_links, args.time_step, device=torch.device("cpu"))
+            dynamics.init_model(model_path, num_links, args.time_step, device=device)
         except Exception as e:
             print(e)
             print(f"Skipping tests")

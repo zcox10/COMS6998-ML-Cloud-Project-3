@@ -1,0 +1,106 @@
+# PIPELINE DEFINITION
+# Name: ml-cloud-pipeline
+components:
+  comp-data-preparation-component:
+    executorLabel: exec-data-preparation-component
+    inputDefinitions:
+      parameters:
+        controller_params:
+          parameterType: STRUCT
+        dynamics_params:
+          parameterType: STRUCT
+        gcs_bucket_name:
+          parameterType: STRING
+        gcs_output_path:
+          parameterType: STRING
+        num_tests:
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRUCT
+deploymentSpec:
+  executors:
+    exec-data-preparation-component:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - data_preparation_component
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef data_preparation_component(\n    num_tests: int,\n    controller_params:\
+          \ dict,\n    dynamics_params: dict,\n    gcs_bucket_name: str,\n    gcs_output_path:\
+          \ str,\n) -> Dict[str, str]:\n\n    # imports\n    from src.data_pipeline\
+          \ import DataPipeline\n    from src.utils.utils import Utils\n    import\
+          \ logging\n\n    # enable logging\n    Utils().configure_component_logging(log_level=logging.DEBUG)\n\
+          \n    # run data pipeline\n    d = DataPipeline()\n    return d.run_data_pipeline(\n\
+          \        num_tests=num_tests,\n        controller_params=controller_params,\n\
+          \        dynamics_params=dynamics_params,\n        gcs_bucket_name=gcs_bucket_name,\n\
+          \        gcs_output_path=gcs_output_path,\n    )\n\n"
+        image: gcr.io/zsc-personal/ml-cloud-pipeline:latest
+pipelineInfo:
+  name: ml-cloud-pipeline
+root:
+  dag:
+    tasks:
+      data-preparation-component:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-data-preparation-component
+        inputs:
+          parameters:
+            controller_params:
+              runtimeValue:
+                constant:
+                  control_horizon: 1.0
+                  data_collection: true
+                  distance_weight: 2.5
+                  num_candidates: 50.0
+                  num_iterations: 10.0
+                  prediction_horizon: 1.0
+                  velocity_weight: 0.02
+            dynamics_params:
+              runtimeValue:
+                constant:
+                  dist_limit:
+                  - 0.2
+                  - 0.3
+                  dt: 0.01
+                  joint_viscous_friction: 0.1
+                  link_length: 1.0
+                  link_mass: 0.1
+                  num_links: 2.0
+                  time_limit: 2.5
+            gcs_bucket_name:
+              runtimeValue:
+                constant: ml-cloud-kubeflow-pipeline-data
+            gcs_output_path:
+              runtimeValue:
+                constant: training_data
+            num_tests:
+              runtimeValue:
+                constant: 5.0
+        taskInfo:
+          name: data-preparation-component
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.12.1

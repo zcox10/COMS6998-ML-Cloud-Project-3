@@ -2,7 +2,7 @@ import math
 import numpy as np
 import time
 import ast
-from robot.geometry import rot, xaxis, yaxis
+from src.robot.geometry import rot, xaxis, yaxis
 
 
 class ArmDynamicsBase:
