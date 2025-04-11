@@ -7,12 +7,85 @@ import ast
 import numpy as np
 import pandas as pd
 import logging
+import pyarrow as pa
+import pyarrow.parquet as pq
+from google.cloud import storage
+from matplotlib.figure import Figure
+import tempfile
+import torch.nn as nn
 from IPython.display import Image, display
 
 
 class GenericUtils:
     def __init__(self):
-        pass
+        self.client = storage.Client()
+
+    def retrieve_latest_gcs_parquet_file(self, gcs_bucket_name, gcs_output_path):
+        bucket = self.client.bucket(gcs_bucket_name)
+
+        # List all blobs in the directory
+        blobs = list(bucket.list_blobs(prefix=gcs_output_path))
+        parquet_blobs = [b for b in blobs if b.name.endswith(".parquet")]
+
+        if not parquet_blobs:
+            raise FileNotFoundError("No parquet files found in the GCS path.")
+
+        # Sort files based on filename assuming timestamp format
+        latest_blob = sorted(parquet_blobs, key=lambda b: b.name, reverse=True)[0]
+
+        # Download the latest file to a temporary path
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".parquet") as temp_file:
+            latest_blob.download_to_filename(temp_file.name)
+            local_path = temp_file.name
+
+        # Read parquet into a dictionary of numpy arrays
+        table = pq.read_table(local_path).to_pydict()
+        X = np.array(table["X"], dtype=np.float32)
+        Y = np.array(table["Y"], dtype=np.float32)
+        return {"X": X, "Y": Y}
+
+    def _upload_file_to_gcs(
+        self, local_path: str, gcs_bucket_name: str, gcs_output_path: str, save_filename: str
+    ) -> str:
+        # Upload to GCS
+        gcs_uri = f"gs://{gcs_bucket_name}/{gcs_output_path}/{save_filename}"
+        logging.info(f"Uploading to GCS: {gcs_uri}")
+
+        client = storage.Client()
+        bucket = client.bucket(gcs_bucket_name)
+        blob = bucket.blob(f"{gcs_output_path}/{save_filename}")
+        blob.upload_from_filename(local_path)
+
+        os.remove(local_path)
+        return gcs_uri
+
+    def save_asset_to_gcs(self, asset, gcs_bucket_name, gcs_output_path, save_filename_prefix):
+
+        # for PNG (plots)
+        if isinstance(asset, Figure):
+            filename = f"{save_filename_prefix}.png"
+            local_path = f"/tmp/{filename}"
+            asset.savefig(local_path, dpi=150)
+
+        # for PyTorch modules
+        elif isinstance(asset, nn.Module):
+            filename = f"{save_filename_prefix}.pth"
+            local_path = f"/tmp/{filename}"
+            torch.save(asset.state_dict(), local_path)
+
+        # for pandas dataframes
+        elif isinstance(asset, pd.DataFrame):
+            filename = f"{save_filename_prefix}.csv"
+            local_path = f"/tmp/{filename}"
+            asset.to_csv(local_path, index=False)
+
+        # for parquet data files
+        elif isinstance(asset, pa.Table):
+            filename = f"{save_filename_prefix}.parquet"
+            local_path = f"/tmp/{filename}"
+            pq.write_table(asset, local_path)
+
+        return self._upload_file_to_gcs(local_path, gcs_bucket_name, gcs_output_path, filename)
 
     def configure_component_logging(self, log_level):
         """
@@ -43,7 +116,7 @@ class GenericUtils:
         elapsed = end - start
         minutes = int(elapsed // 60)
         seconds = elapsed % 60
-        print(f"\n{message}: {minutes} min {seconds:.2f} sec\n")
+        logging.info(f"{message}: {minutes} min {seconds:.2f} sec")
         return round(elapsed / 60, 2)
 
     def get_highest_sorted_file(self, directory, prefix, extension):
@@ -69,9 +142,9 @@ class GenericUtils:
         for dir_path in dirs_to_create:
             os.makedirs(dir_path, exist_ok=True)
             if os.path.isdir(dir_path):
-                print(f"Created or already exists: {dir_path}")
+                logging.info(f"Created or already exists: {dir_path}")
             else:
-                print(f"Failed to create: {dir_path}")
+                logging.info(f"Failed to create: {dir_path}")
 
     def _extract_part_timestamp(self, filename):
         pattern = r"^(part_\d+_\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})"
@@ -103,7 +176,7 @@ class GenericUtils:
 
             df.to_csv(filename, index=False)
         except Exception as e:
-            print("Error adding scores to DataFrame:", e)
+            logging.info("Error adding scores to DataFrame:", e)
 
         return df
 

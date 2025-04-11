@@ -13,11 +13,12 @@ from src.robot.score import sample_goal
 from src.robot.robot import Robot
 from src.robot.arm_dynamics_teacher import ArmDynamicsTeacher
 from src.dynamics.mpc import MPC
+from src.utils.utils import Utils
 
 
 class DataPipeline:
     def __init__(self):
-        pass
+        self.utils = Utils()
 
     @staticmethod
     def _collect_data_chunk(args):
@@ -139,8 +140,7 @@ class DataPipeline:
         num_tests: int,
         controller_params: dict,
         dynamics_params: dict,
-        gcs_bucket_name: str,
-        gcs_output_path: str,
+        gcs_file_paths: Dict[str, str],
     ) -> Dict[str, str]:
         """
         A data processing component for generating training data for a robotic arm simulation.
@@ -181,33 +181,24 @@ class DataPipeline:
         # Combine results from all worker processes
         X = np.vstack([res[0] for res in results])  # Input features (state + action)
         Y = np.vstack([res[1] for res in results])  # Output targets (next state)
-        data = {"X": X, "Y": Y}
-
-        # Upload to GCS as parquet file
-        # Save as local copy, upload to GCS as parquet file, then delete local copy
         data = {
-            **{f"x{i}": X[:, i] for i in range(X.shape[1])},
-            **{f"y{i}": Y[:, i] for i in range(Y.shape[1])},
+            "X": [row.tolist() for row in X],
+            "Y": [row.tolist() for row in Y],
         }
+
+        # if isinstance(table, pa.Table):
+
+        # Save as local copy, upload to GCS as parquet file, then delete local copy
         table = pa.table(data)
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        output_file_name = f"training_data_{timestamp}.parquet"
-        local_path = f"/tmp/{output_file_name}"
-        logging.debug("Writing to local file")
-        pq.write_table(table, local_path)
+        filename_prefix = f"training_data_{timestamp}"
 
-        # Upload local copy to GCS
-        logging.debug("Uploading to GCS")
-        client = storage.Client()
-        bucket = client.bucket(gcs_bucket_name)
-        blob_path = f"{gcs_output_path}/{output_file_name}"
-        blob = bucket.blob(blob_path)
-        blob.upload_from_filename(local_path)
-
-        # Delete the local file and generate GCS URI
-        logging.debug("Deleting local file")
-        os.remove(local_path)
-        gcs_uri = f"gs://{gcs_bucket_name}/{blob_path}"
+        gcs_uri = self.utils.save_asset_to_gcs(
+            table,
+            gcs_file_paths["bucket_name"],
+            gcs_file_paths["training_data_path"],
+            filename_prefix,
+        )
 
         # Calculate metrics for logging
         passed_trials = sum([res[2] for res in results])

@@ -1,6 +1,7 @@
 import numpy as np
 from src.robot.arm_dynamics_base import ArmDynamicsBase
 from src.robot.geometry import rot, xaxis, yaxis
+import logging
 
 
 class ArmDynamicsTeacher(ArmDynamicsBase):
@@ -135,7 +136,9 @@ class ArmDynamicsTeacher(ArmDynamicsBase):
         self.residue = np.linalg.norm(np.dot(left_hand, x) - right_hand) / self.num_var()
         residue = np.linalg.norm(np.dot(left_hand, x) - right_hand) / self.num_var()
         if residue > self.residue_limit:
-            print("cannot solve, residue {} exceeds limit {}".format(residue, self.residue_limit))
+            logging.warning(
+                "cannot solve, residue {} exceeds limit {}".format(residue, self.residue_limit)
+            )
             self.residue_limit_flag = True
         a = x[self.idx_a(0) : self.idx_a(self.num_links)]
         omdot = x[self.idx_omdot(0) : self.idx_omdot(self.num_links)]

@@ -1,33 +1,41 @@
 # PIPELINE DEFINITION
 # Name: ml-cloud-pipeline
 components:
-  comp-data-preparation-component:
-    executorLabel: exec-data-preparation-component
+  comp-data-preparation:
+    executorLabel: exec-data-preparation
     inputDefinitions:
       parameters:
         controller_params:
           parameterType: STRUCT
         dynamics_params:
           parameterType: STRUCT
-        gcs_bucket_name:
-          parameterType: STRING
-        gcs_output_path:
-          parameterType: STRING
+        gcs_file_paths:
+          parameterType: STRUCT
         num_tests:
           parameterType: NUMBER_INTEGER
     outputDefinitions:
       parameters:
         Output:
           parameterType: STRUCT
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      parameters:
+        gcs_file_paths:
+          parameterType: STRUCT
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRUCT
 deploymentSpec:
   executors:
-    exec-data-preparation-component:
+    exec-data-preparation:
       container:
         args:
         - --executor_input
         - '{{$}}'
         - --function_to_execute
-        - data_preparation_component
+        - data_preparation
         command:
         - sh
         - -c
@@ -47,26 +55,59 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef data_preparation_component(\n    num_tests: int,\n    controller_params:\
-          \ dict,\n    dynamics_params: dict,\n    gcs_bucket_name: str,\n    gcs_output_path:\
-          \ str,\n) -> Dict[str, str]:\n\n    # imports\n    from src.data_pipeline\
-          \ import DataPipeline\n    from src.utils.utils import Utils\n    import\
-          \ logging\n\n    # enable logging\n    Utils().configure_component_logging(log_level=logging.DEBUG)\n\
-          \n    # run data pipeline\n    d = DataPipeline()\n    return d.run_data_pipeline(\n\
+          \ *\n\ndef data_preparation(\n    num_tests: int, controller_params: dict,\
+          \ dynamics_params: dict, gcs_file_paths: Dict[str, str]\n) -> Dict[str,\
+          \ str]:\n\n    # imports\n    import logging\n\n    from src.data_pipeline\
+          \ import DataPipeline\n    from src.utils.utils import Utils\n\n    # enable\
+          \ logging\n    Utils().configure_component_logging(log_level=logging.INFO)\n\
+          \n    # run data pipeline\n    return DataPipeline().run_data_pipeline(\n\
           \        num_tests=num_tests,\n        controller_params=controller_params,\n\
-          \        dynamics_params=dynamics_params,\n        gcs_bucket_name=gcs_bucket_name,\n\
-          \        gcs_output_path=gcs_output_path,\n    )\n\n"
+          \        dynamics_params=dynamics_params,\n        gcs_file_paths=gcs_file_paths,\n\
+          \    )\n\n"
+        image: gcr.io/zsc-personal/ml-cloud-pipeline:latest
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(gcs_file_paths: Dict[str, str]) -> Dict[str, str]:\n\
+          \n    # imports\n    import logging\n    import torch\n\n    from src.model_trainer\
+          \ import ModelTrainer\n    from src.utils.utils import Utils\n\n    # enable\
+          \ logging\n    Utils().configure_component_logging(log_level=logging.INFO)\n\
+          \n    device = \"cuda\" if torch.cuda.is_available() else \"cpu\"\n    return\
+          \ ModelTrainer(device=device).train(show_plot=False, gcs_file_paths=gcs_file_paths)\n\
+          \n"
         image: gcr.io/zsc-personal/ml-cloud-pipeline:latest
 pipelineInfo:
   name: ml-cloud-pipeline
 root:
   dag:
     tasks:
-      data-preparation-component:
-        cachingOptions:
-          enableCache: true
+      data-preparation:
+        cachingOptions: {}
         componentRef:
-          name: comp-data-preparation-component
+          name: comp-data-preparation
         inputs:
           parameters:
             controller_params:
@@ -91,16 +132,36 @@ root:
                   link_mass: 0.1
                   num_links: 2.0
                   time_limit: 2.5
-            gcs_bucket_name:
+            gcs_file_paths:
               runtimeValue:
-                constant: ml-cloud-kubeflow-pipeline-data
-            gcs_output_path:
-              runtimeValue:
-                constant: training_data
+                constant:
+                  bucket_name: ml-cloud-kubeflow-pipeline-data
+                  eval_data_path: eval/data
+                  eval_plot_path: eval/plots
+                  model_path: models
+                  training_data_path: training_data
             num_tests:
               runtimeValue:
-                constant: 5.0
+                constant: 1.0
         taskInfo:
-          name: data-preparation-component
+          name: data-preparation
+      train-model:
+        cachingOptions: {}
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - data-preparation
+        inputs:
+          parameters:
+            gcs_file_paths:
+              runtimeValue:
+                constant:
+                  bucket_name: ml-cloud-kubeflow-pipeline-data
+                  eval_data_path: eval/data
+                  eval_plot_path: eval/plots
+                  model_path: models
+                  training_data_path: training_data
+        taskInfo:
+          name: train-model
 schemaVersion: 2.1.0
 sdkVersion: kfp-2.12.1

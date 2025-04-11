@@ -1,6 +1,6 @@
 import numpy as np
-import pickle
 import torch
+import logging
 from torch.utils.data import DataLoader, Dataset, random_split
 
 
@@ -48,20 +48,19 @@ class DatasetUtils:
         Y_norm = self._normalize_data(self.Y, self.Y_mean, self.Y_std)
 
         # Print statistics
-        # print(f"X_mean: {self.X_mean}")
-        # print(f"X_std: {self.X_std}")
-        # print(f"Y_mean: {self.Y_mean}")
-        # print(f"Y_std: {self.Y_std}")
+        logging.debug(f"X_mean: {self.X_mean}")
+        logging.debug(f"X_std: {self.X_std}")
+        logging.debug(f"Y_mean: {self.Y_mean}")
+        logging.debug(f"Y_std: {self.Y_std}")
 
         return X_norm, Y_norm
 
-    def _generate_data(self, data_file):
-        data = pickle.load(open(data_file, "rb"))
+    def _generate_data(self, data):
         self.X = data["X"].astype(np.float32)
         self.Y = data["Y"].astype(np.float32)
 
-    def retrieve_dataset_statistics(self, data_file):
-        self._generate_data(data_file)
+    def retrieve_dataset_statistics(self, data):
+        self._generate_data(data)
         _, _ = self._generate_features()
         return self.X_mean, self.X_std, self.Y_mean, self.Y_std
 
@@ -79,8 +78,8 @@ class DatasetUtils:
         Y = Y_pred_norm * Y_std + Y_mean
         return Y
 
-    def create_data_loaders(self, data_file, batch_size, train_ratio, val_ratio, seed):
-        self._generate_data(data_file)
+    def create_data_loaders(self, data, batch_size, train_ratio, val_ratio, seed):
+        self._generate_data(data)
 
         # Normalize data and generate Y
         X_norm, Y_norm = self._generate_features()

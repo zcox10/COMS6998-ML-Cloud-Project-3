@@ -10,6 +10,17 @@ class Utils:
         self.model_utils = ModelUtils()
 
     # GenericUtils
+    def save_asset_to_gcs(self, asset, gcs_bucket_name, gcs_output_path, save_filename_prefix):
+        return self.generic_utils.save_asset_to_gcs(
+            asset, gcs_bucket_name, gcs_output_path, save_filename_prefix
+        )
+
+    def retrieve_latest_gcs_parquet_file(self, gcs_bucket_name, gcs_output_path):
+        return self.generic_utils.retrieve_latest_gcs_parquet_file(gcs_bucket_name, gcs_output_path)
+
+    def save_model_to_gcs(self, model, gcs_bucket_name, gcs_output_path):
+        return self.generic_utils.save_model_to_gcs(model, gcs_bucket_name, gcs_output_path)
+
     def configure_component_logging(self, log_level):
         self.generic_utils.configure_component_logging(log_level)
 
@@ -35,8 +46,8 @@ class Utils:
         return self.generic_utils.view_metrics(data_directory, plots_directory, prefix, sort_cols)
 
     # DatasetUtils
-    def retrieve_dataset_statistics(self, data_file):
-        return self.dataset_utils.retrieve_dataset_statistics(data_file)
+    def retrieve_dataset_statistics(self, data):
+        return self.dataset_utils.retrieve_dataset_statistics(data)
 
     def normalize_input(self, X_input, X_mean, X_std):
         return self.dataset_utils.normalize_input(X_input, X_mean, X_std)
@@ -44,9 +55,9 @@ class Utils:
     def denormalize_prediction(self, X_input, Y_pred_norm, Y_mean, Y_std):
         return self.dataset_utils.denormalize_prediction(X_input, Y_pred_norm, Y_mean, Y_std)
 
-    def create_data_loaders(self, data_file, batch_size, train_ratio, val_ratio, seed):
+    def create_data_loaders(self, data, batch_size, train_ratio, val_ratio, seed):
         return self.dataset_utils.create_data_loaders(
-            data_file, batch_size, train_ratio, val_ratio, seed
+            data, batch_size, train_ratio, val_ratio, seed
         )
 
     # ModelUtils

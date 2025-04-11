@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-
+import logging
 from src.robot.arm_dynamics_base import ArmDynamicsBase
 from utils.utils import Utils
 
@@ -10,7 +10,8 @@ class ArmDynamicsStudent(ArmDynamicsBase):
         self,
         device,
         model,
-        data_path,
+        gcs_bucket_name,
+        gcs_data_path,
         num_links,
         link_mass,
         link_length,
@@ -30,8 +31,9 @@ class ArmDynamicsStudent(ArmDynamicsBase):
         # Load utils and retrieve mean/std of features and labels
         self.utils = Utils()
         self.utils.set_seed()
+        data = self.utils.retrieve_latest_gcs_parquet_file(gcs_bucket_name, gcs_data_path)
         self.X_mean, self.X_std, self.Y_mean, self.Y_std = self.utils.retrieve_dataset_statistics(
-            data_path
+            data
         )
 
     def init_model(self, model_path, num_links=2, time_step=0.01, device=torch.device("cpu")):
@@ -57,5 +59,5 @@ class ArmDynamicsStudent(ArmDynamicsBase):
         new_action = self.utils.denormalize_prediction(
             X, y_pred_norm, self.Y_mean, self.Y_std
         ).reshape(4, 1)
-        # print(f"\nNew Action: {new_action}; Shape: {new_action.shape}\n")
+        # logging.debug(f"\nNew Action: {new_action}; Shape: {new_action.shape}\n")
         return new_action
