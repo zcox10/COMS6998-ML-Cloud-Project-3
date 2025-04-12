@@ -1,6 +1,6 @@
-from ..utils.dataset_utils import DatasetUtils
-from ..utils.generic_utils import GenericUtils
-from ..utils.model_utils import ModelUtils
+from src.utils.dataset_utils import DatasetUtils
+from src.utils.generic_utils import GenericUtils
+from src.utils.model_utils import ModelUtils
 
 
 class Utils:
@@ -15,11 +15,8 @@ class Utils:
             asset, gcs_bucket_name, gcs_output_path, save_filename_prefix
         )
 
-    def retrieve_latest_gcs_parquet_file(self, gcs_bucket_name, gcs_output_path):
-        return self.generic_utils.retrieve_latest_gcs_parquet_file(gcs_bucket_name, gcs_output_path)
-
-    def save_model_to_gcs(self, model, gcs_bucket_name, gcs_output_path):
-        return self.generic_utils.save_model_to_gcs(model, gcs_bucket_name, gcs_output_path)
+    def load_gcs_file(self, gcs_bucket_name, gcs_output_path, file_suffix):
+        return self.generic_utils.load_gcs_file(gcs_bucket_name, gcs_output_path, file_suffix)
 
     def configure_component_logging(self, log_level):
         self.generic_utils.configure_component_logging(log_level)
@@ -27,8 +24,8 @@ class Utils:
     def set_seed(self, seed=10):
         self.generic_utils.set_seed(seed)
 
-    def set_device(self, device):
-        self.generic_utils.set_device(device)
+    def set_device(self):
+        return self.generic_utils.set_device()
 
     def time_operation(self, start, message="Elapsed time"):
         return self.generic_utils.time_operation(start, message)

@@ -1,11 +1,8 @@
-import os
 import time
 from datetime import datetime
 import numpy as np
 import pyarrow as pa
-import pyarrow.parquet as pq
 from multiprocessing import Pool, cpu_count
-from google.cloud import storage
 import logging
 from typing import Dict
 

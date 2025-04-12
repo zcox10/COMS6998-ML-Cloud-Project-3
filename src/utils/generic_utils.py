@@ -20,29 +20,42 @@ class GenericUtils:
     def __init__(self):
         self.client = storage.Client()
 
-    def retrieve_latest_gcs_parquet_file(self, gcs_bucket_name, gcs_output_path):
+    def _load_latest_gcs_file_locally(self, gcs_bucket_name, gcs_output_path, file_suffix):
         bucket = self.client.bucket(gcs_bucket_name)
 
-        # List all blobs in the directory
-        blobs = list(bucket.list_blobs(prefix=gcs_output_path))
-        parquet_blobs = [b for b in blobs if b.name.endswith(".parquet")]
+        # Recursively list all blobs under the prefix
+        all_blobs = list(bucket.list_blobs(prefix=gcs_output_path))
+        blobs = [b for b in all_blobs if b.name.endswith(file_suffix)]
 
-        if not parquet_blobs:
-            raise FileNotFoundError("No parquet files found in the GCS path.")
+        if not blobs:
+            raise FileNotFoundError("No files found in the GCS path.")
 
-        # Sort files based on filename assuming timestamp format
-        latest_blob = sorted(parquet_blobs, key=lambda b: b.name, reverse=True)[0]
+        # Sort by last updated timestamp (most reliable)
+        latest_blob = sorted(blobs, key=lambda b: b.updated, reverse=True)[0]
+        latest_uri = f"gs://{gcs_bucket_name}/{latest_blob.name}"
+        logging.info(f"Retrieved latest file: {latest_uri}")
 
-        # Download the latest file to a temporary path
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".parquet") as temp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as temp_file:
             latest_blob.download_to_filename(temp_file.name)
             local_path = temp_file.name
 
-        # Read parquet into a dictionary of numpy arrays
-        table = pq.read_table(local_path).to_pydict()
-        X = np.array(table["X"], dtype=np.float32)
-        Y = np.array(table["Y"], dtype=np.float32)
-        return {"X": X, "Y": Y}
+        return local_path
+
+    def load_gcs_file(self, gcs_bucket_name, gcs_output_path, file_suffix):
+        local_path = self._load_latest_gcs_file_locally(
+            gcs_bucket_name, gcs_output_path, file_suffix
+        )
+
+        # Parquet load
+        if file_suffix == ".parquet":
+            table = pq.read_table(local_path).to_pydict()
+            X = np.array(table["X"], dtype=np.float32)
+            Y = np.array(table["Y"], dtype=np.float32)
+            return {"X": X, "Y": Y}
+
+        # PyTorch load
+        elif file_suffix == ".pth":
+            return torch.load(local_path)
 
     def _upload_file_to_gcs(
         self, local_path: str, gcs_bucket_name: str, gcs_output_path: str, save_filename: str
@@ -51,8 +64,7 @@ class GenericUtils:
         gcs_uri = f"gs://{gcs_bucket_name}/{gcs_output_path}/{save_filename}"
         logging.info(f"Uploading to GCS: {gcs_uri}")
 
-        client = storage.Client()
-        bucket = client.bucket(gcs_bucket_name)
+        bucket = self.client.bucket(gcs_bucket_name)
         blob = bucket.blob(f"{gcs_output_path}/{save_filename}")
         blob.upload_from_filename(local_path)
 
@@ -89,11 +101,28 @@ class GenericUtils:
 
     def configure_component_logging(self, log_level):
         """
-        Configure logging according to an associated log_level.
+        Configure root logger for component logs.
         """
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
-        logging.basicConfig(level=log_level, format="\n%(levelname)s: %(message)s\n")
+        logger = logging.getLogger()  # Get the root logger
+        logger.setLevel(log_level)
+
+        # Clear existing handlers
+        if logger.hasHandlers():
+            logger.handlers.clear()
+
+        # Add console handler
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter("%(levelname)s: %(message)s")
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+
+    # def configure_component_logging(self, log_level):
+    #     """
+    #     Configure logging according to an associated log_level.
+    #     """
+    #     for handler in logging.root.handlers[:]:
+    #         logging.root.removeHandler(handler)
+    #     logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 
     def set_seed(self, seed):
         """
@@ -108,7 +137,8 @@ class GenericUtils:
         torch.backends.cudnn.benchmark = False
         torch.use_deterministic_algorithms(True)
 
-    def set_device(self, device):
+    def set_device(self):
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         return torch.device(device)
 
     def time_operation(self, start, message):

@@ -2,16 +2,14 @@ import numpy as np
 import torch
 import logging
 from src.robot.arm_dynamics_base import ArmDynamicsBase
-from utils.utils import Utils
+from src.utils.utils import Utils
 
 
 class ArmDynamicsStudent(ArmDynamicsBase):
     def __init__(
         self,
-        device,
-        model,
-        gcs_bucket_name,
-        gcs_data_path,
+        model_class,
+        gcs_file_paths,
         num_links,
         link_mass,
         link_length,
@@ -25,20 +23,23 @@ class ArmDynamicsStudent(ArmDynamicsBase):
             joint_viscous_friction=joint_viscous_friction,
             dt=dt,
         )
-        self.device = device
-        self.model = model
+        self.utils = Utils()
+        self.device = self.utils.set_device()
+        self.model = model_class
 
         # Load utils and retrieve mean/std of features and labels
-        self.utils = Utils()
-        self.utils.set_seed()
-        data = self.utils.retrieve_latest_gcs_parquet_file(gcs_bucket_name, gcs_data_path)
+        data = self.utils.load_gcs_file(
+            gcs_file_paths["bucket_name"],
+            gcs_file_paths["training_data_path"],
+            file_suffix=".parquet",
+        )
         self.X_mean, self.X_std, self.Y_mean, self.Y_std = self.utils.retrieve_dataset_statistics(
             data
         )
 
-    def init_model(self, model_path, num_links=2, time_step=0.01, device=torch.device("cpu")):
+    def init_model(self, model):
         # Load model
-        self.model.load_state_dict(torch.load(model_path))
+        self.model.load_state_dict(model)
         self.model.eval()
         self.model_loaded = True
 
@@ -59,5 +60,6 @@ class ArmDynamicsStudent(ArmDynamicsBase):
         new_action = self.utils.denormalize_prediction(
             X, y_pred_norm, self.Y_mean, self.Y_std
         ).reshape(4, 1)
+
         # logging.debug(f"\nNew Action: {new_action}; Shape: {new_action.shape}\n")
         return new_action

@@ -42,9 +42,7 @@ def train_model(gcs_file_paths: Dict[str, str]) -> Dict[str, str]:
 
     # enable logging
     Utils().configure_component_logging(log_level=logging.INFO)
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    return ModelTrainer(device=device).train(show_plot=False, gcs_file_paths=gcs_file_paths)
+    return ModelTrainer().train(show_plot=False, gcs_file_paths=gcs_file_paths)
 
 
 # define Kubeflow pipeline
