@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Docker config
+DOCKERFILE="Dockerfile.train"
 IMAGE_NAME="gcr.io/zsc-personal/ml-cloud-pipeline"
 CACHE_NAME="${IMAGE_NAME}:cache"
 PLATFORM="linux/amd64"
@@ -45,6 +46,7 @@ push_new_docker_image() {
     echo -e "\n========== Building and pushing Docker image with caching ==========\n"
 
     docker buildx build \
+        --file "${DOCKERFILE}" \
         --platform "${PLATFORM}" \
         --tag "${IMAGE_NAME}:${TAG}" \
         --cache-from=type=registry,ref="${CACHE_NAME}" \
@@ -58,7 +60,7 @@ push_new_docker_image() {
 
 run_kubeflow_pipeline() {
     echo -e "\n========== Upload pipeline and run =========="
-    python run_pipeline.py
+    python run_kubeflow_pipeline.py
 }
 
 delete_old_container_images

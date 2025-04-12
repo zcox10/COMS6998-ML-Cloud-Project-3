@@ -4,6 +4,7 @@ import time
 import math
 from math import pi
 import os
+import logging
 from datetime import datetime
 
 from src.robot.arm_dynamics_teacher import ArmDynamicsTeacher
@@ -49,7 +50,7 @@ def test(arm, dynamics, goal, renderer, controller, gui, args, dist_limit, time_
 
     initial_pos = arm.dynamics.compute_fk(initial_state)
     initial_dist = np.linalg.norm(goal - initial_pos)
-    print(f"Initial distance to goal: {initial_dist:.4f}")
+    logging.info(f"Initial distance to goal: {initial_dist:.4f}")
 
     # Controller to reach goals
     arm.reset()
@@ -95,11 +96,12 @@ def get_goal(radius, angle):
     return radius * np.array([np.cos(angle), np.sin(angle)]).reshape(-1, 1)
 
 
-def score_mpc_learnt_dynamics(controller, arm_student, model_path, device, gui):
+def score_mpc_learnt_dynamics(controller, arm_student, model, gui):
     args, unknown = get_args()
     GOALS = {
         1: [get_goal(1, 0.4), get_goal(1, -0.75)],
-        2: [sample_goal() for _ in range(16)],
+        # 2: [sample_goal() for _ in range(16)],
+        2: [sample_goal()],
         3: [
             get_goal(2.2, -1.0),
             get_goal(1.8, -0.25),
@@ -115,15 +117,15 @@ def score_mpc_learnt_dynamics(controller, arm_student, model_path, device, gui):
         time.sleep(1)
     # Part2: Evaluate controller with learned dynamics
     score = 0.0
-    print("Part2: EVALUATING CONTROLLER + LEARNED DYNAMICS")
-    print("-----------------------------------------------")
+    logging.info("Part2: EVALUATING CONTROLLER + LEARNED DYNAMICS")
+    logging.info("-----------------------------------------------")
 
     pass_trials = 0
     partial_pass_trials = 0
     fail_trials = 0
     total_distance = 0
     for num_links in range(2, 3):
-        print("NUM_LINKS:", num_links)
+        logging.info(f"NUM_LINKS: {num_links}")
         # Arm
         arm = Robot(
             ArmDynamicsTeacher(
@@ -137,18 +139,10 @@ def score_mpc_learnt_dynamics(controller, arm_student, model_path, device, gui):
 
         # Learnt dynamics
         dynamics = arm_student
-        if not os.path.exists(model_path):
-            print(f"model not found at {model_path}, skipping tests")
-            continue
-        try:
-            dynamics.init_model(model_path, num_links, args.time_step, device=device)
-        except Exception as e:
-            print(e)
-            print(f"Skipping tests")
-            continue
+        dynamics.init_model(model)
 
         for i, goal in enumerate(GOALS[num_links]):
-            print("\nTest ", i + 1)
+            logging.info(f"Test {i + 1}")
             try:
                 dist_limit = [0.2, 0.3]
                 result, pos_ee, vel_ee, dist = test(
@@ -164,38 +158,31 @@ def score_mpc_learnt_dynamics(controller, arm_student, model_path, device, gui):
                 )
                 total_distance += dist
             except Exception as e:
-                print(e)
+                logging.warning(e)
                 continue
 
             if result == "full":
-                print(
+                logging.info(
                     f"Success! :)\n Goal: {GOALS[num_links][i].reshape(-1).round(3)}, Final position: {pos_ee.reshape(-1).round(3)}, Final velocity: {vel_ee.reshape(-1).round(3)}, Distance to Goal: {round(dist, 3)}"
                 )
-                print("score:", "0.5/0.5")
-                score += 0.5
+                logging.info("score: 1.0 / 1.0")
+                score += 1.0
                 pass_trials += 1
             elif result == "partial":
-                print(
+                logging.info(
                     f"Partial Success:|\n Goal: {GOALS[num_links][i].reshape(-1).round(3)}, Final position: {pos_ee.reshape(-1).round(3)}, Final velocity: {vel_ee.reshape(-1).round(3)}, Distance to Goal: {round(dist, 3)}"
                 )
-                print("score:", "0.3/0.5")
-                score += 0.25
+                logging.info("score: 0.5 / 1.0")
+                score += 0.5
                 partial_pass_trials += 1
             else:
-                print(
+                logging.info(
                     f"Fail! :(\n Goal: {GOALS[num_links][i].reshape(-1).round(3)}, Final position: {pos_ee.reshape(-1).round(3)}, Final velocity: {vel_ee.reshape(-1).round(3)}, Distance to Goal: {round(dist, 3)}"
                 )
-                print("score:", "0/0.5")
+                logging.info("score: 0.0 / 1.0")
                 fail_trials += 1
-    score = (score / 7.5) * 5
-    print("       ")
-    print("-------------------------")
-    print("Part 2 SCORE: ", f"{min(score, 5)}/5")
-    print("-------------------------")
+    score = score / 1.0
 
-    # if renderer is not None:
-    #     renderer.plotter.terminate()
-    # TODO: remove return for data
     return {
         "score": score,
         "pass_trials": pass_trials,

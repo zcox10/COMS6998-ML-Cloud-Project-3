@@ -1,6 +1,6 @@
-from ..utils.dataset_utils import DatasetUtils
-from ..utils.generic_utils import GenericUtils
-from ..utils.model_utils import ModelUtils
+from src.utils.dataset_utils import DatasetUtils
+from src.utils.generic_utils import GenericUtils
+from src.utils.model_utils import ModelUtils
 
 
 class Utils:
@@ -10,14 +10,22 @@ class Utils:
         self.model_utils = ModelUtils()
 
     # GenericUtils
+    def save_asset_to_gcs(self, asset, gcs_bucket_name, gcs_output_path, save_filename_prefix):
+        return self.generic_utils.save_asset_to_gcs(
+            asset, gcs_bucket_name, gcs_output_path, save_filename_prefix
+        )
+
+    def load_gcs_file(self, gcs_bucket_name, gcs_output_path, file_suffix):
+        return self.generic_utils.load_gcs_file(gcs_bucket_name, gcs_output_path, file_suffix)
+
     def configure_component_logging(self, log_level):
         self.generic_utils.configure_component_logging(log_level)
 
     def set_seed(self, seed=10):
         self.generic_utils.set_seed(seed)
 
-    def set_device(self, device):
-        self.generic_utils.set_device(device)
+    def set_device(self):
+        return self.generic_utils.set_device()
 
     def time_operation(self, start, message="Elapsed time"):
         return self.generic_utils.time_operation(start, message)
@@ -35,8 +43,8 @@ class Utils:
         return self.generic_utils.view_metrics(data_directory, plots_directory, prefix, sort_cols)
 
     # DatasetUtils
-    def retrieve_dataset_statistics(self, data_file):
-        return self.dataset_utils.retrieve_dataset_statistics(data_file)
+    def retrieve_dataset_statistics(self, data):
+        return self.dataset_utils.retrieve_dataset_statistics(data)
 
     def normalize_input(self, X_input, X_mean, X_std):
         return self.dataset_utils.normalize_input(X_input, X_mean, X_std)
@@ -44,9 +52,9 @@ class Utils:
     def denormalize_prediction(self, X_input, Y_pred_norm, Y_mean, Y_std):
         return self.dataset_utils.denormalize_prediction(X_input, Y_pred_norm, Y_mean, Y_std)
 
-    def create_data_loaders(self, data_file, batch_size, train_ratio, val_ratio, seed):
+    def create_data_loaders(self, data, batch_size, train_ratio, val_ratio, seed):
         return self.dataset_utils.create_data_loaders(
-            data_file, batch_size, train_ratio, val_ratio, seed
+            data, batch_size, train_ratio, val_ratio, seed
         )
 
     # ModelUtils

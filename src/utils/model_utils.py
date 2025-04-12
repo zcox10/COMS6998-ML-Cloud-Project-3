@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import pandas as pd
 import matplotlib.pyplot as plt
+import logging
+from src.utils.generic_utils import GenericUtils
 
 
 class ModelUtils:
@@ -112,9 +114,9 @@ class ModelUtils:
                 patience_counter, best_val_loss = self._determine_early_stopping(
                     val_metrics["avg_loss"], best_val_loss, patience_counter
                 )
-                # print(f"Patience counter: {patience_counter}")
+                # logging.info(f"Patience counter: {patience_counter}")
                 if patience_counter >= patience:
-                    print(f"Early stopping triggered! Epoch {epoch + 1}")
+                    logging.info(f"Early stopping triggered! Epoch {epoch + 1}")
                     break
 
             # Print epoch summary
@@ -145,7 +147,7 @@ class ModelUtils:
                 progress_message += (
                     f"\nAvg Gradient: {avg_grad:<10.8f}" if monitor_gradients else ""
                 )
-                print(progress_message)
+                logging.info(progress_message)
 
             # Update learning rate according to scheduler
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -157,7 +159,7 @@ class ModelUtils:
             for param_group in optimizer.param_groups:
                 learning_rates.append(param_group["lr"])
 
-        print("\nTraining complete\n")
+        logging.info("Training complete")
         return {
             # Train Epoch Metrics
             "train_losses": train_losses,
@@ -197,9 +199,11 @@ class ModelUtils:
                 grad_norm = param.grad.norm().item()
                 total_gradients.append(grad_norm)
                 if grad_norm > 1e8:
-                    print(f"\nWarning: Exploding Gradient Detected in {name}: {grad_norm:.2e}\n")
+                    logging.info(
+                        f"\nWarning: Exploding Gradient Detected in {name}: {grad_norm:.2e}\n"
+                    )
                 elif grad_norm < 1e-8:
-                    print(f"\nWarning: Vanishing Gradient Detected in {name}: {grad_norm}\n")
+                    logging.info(f"Warning: Vanishing Gradient Detected in {name}: {grad_norm}")
         avg_grad = sum(total_gradients) / len(total_gradients) if total_gradients else 0
         return avg_grad
 
@@ -280,7 +284,7 @@ class ModelUtils:
         s_y2 = torch.zeros(1, dtype=torch.float32, device=device)  # sum of labels^2
         total_samples = 0
 
-        print("\nCalculate Test Performance\n")
+        logging.info("Calculate Test Performance")
         with torch.no_grad():
             for inputs, labels in dataloader:
                 inputs, labels = inputs.to(device), labels.to(device).float()
@@ -318,7 +322,7 @@ class ModelUtils:
             + f"Train MAE: {mae:{fmt}} | "
             + f"Train R²: {r2:{fmt}}\n"
         )
-        print(test_metrics_message)
+        logging.info(test_metrics_message)
 
         return {
             "final_test_loss": avg_loss,
@@ -329,7 +333,7 @@ class ModelUtils:
         }
 
     def _plot_training_regression_summary(
-        self, training_metrics, test_metrics, save_filename_prefix, show_plot
+        self, training_metrics, test_metrics, gcs_file_paths, show_plot
     ):
         """
         Plots a 3x3 summary:
@@ -501,9 +505,13 @@ class ModelUtils:
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
         # Save the figure
-        plot_filename = f"{save_filename_prefix}_training_summary.png"
-        plt.savefig(plot_filename, dpi=150)
-        print(f"\nTraining summary plot saved to: {plot_filename}")
+        gcs_uri = GenericUtils().save_asset_to_gcs(
+            fig,
+            gcs_file_paths["bucket_name"],
+            gcs_file_paths["eval_plot_path"],
+            gcs_file_paths["filename_prefix"],
+        )
+
         if show_plot:
             plt.show()
         else:
@@ -516,11 +524,9 @@ class ModelUtils:
         criterion,
         device,
         training_metrics,
-        model_parameters,
         total_samples,
-        training_time,
-        data_save_filename_prefix,
-        plot_save_filename_prefix,
+        model_parameters,
+        gcs_file_paths,
         show_plot,
     ):
         # Calculate test performance
@@ -532,7 +538,7 @@ class ModelUtils:
         self._plot_training_regression_summary(
             training_metrics=training_metrics,
             test_metrics=test_metrics,
-            save_filename_prefix=plot_save_filename_prefix,
+            gcs_file_paths=gcs_file_paths,
             show_plot=show_plot,
         )
 
@@ -540,9 +546,8 @@ class ModelUtils:
         df = pd.DataFrame([model_parameters])
 
         # Insert any fields you want into df
-        df["file_name"] = [data_save_filename_prefix.split("/")[-1]]
+        df["file_name"] = [gcs_file_paths["filename_prefix"]]
         df["total_samples"] = [total_samples]
-        df["training_time"] = [training_time]
         df["final_epoch"] = [training_metrics["final_epoch"]]
         df["best_val_loss"] = [training_metrics["best_val_loss"]]
         df["train_loss"] = [training_metrics["final_train_loss"]]
@@ -562,6 +567,11 @@ class ModelUtils:
         df["test_r2"] = [test_metrics["final_test_r2"]]
 
         # Safe df
-        df.to_csv(f"{data_save_filename_prefix}_model_performance.csv", index=False)
+        gcs_uri = GenericUtils().save_asset_to_gcs(
+            df,
+            gcs_file_paths["bucket_name"],
+            gcs_file_paths["eval_data_path"],
+            gcs_file_paths["filename_prefix"],
+        )
 
         return df

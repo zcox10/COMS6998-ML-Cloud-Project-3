@@ -1,5 +1,5 @@
 import numpy as np
-from ..utils.utils import Utils
+from src.utils.utils import Utils
 
 
 class MPC:

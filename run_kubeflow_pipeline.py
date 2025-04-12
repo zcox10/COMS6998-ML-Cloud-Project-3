@@ -8,59 +8,86 @@ from typing import Dict
 
 
 @dsl.component(base_image="gcr.io/zsc-personal/ml-cloud-pipeline:latest")
-def data_preparation_component(
-    num_tests: int,
-    controller_params: dict,
-    dynamics_params: dict,
-    gcs_bucket_name: str,
-    gcs_output_path: str,
+def data_preparation(
+    num_tests: int, controller_params: dict, dynamics_params: dict, gcs_file_paths: Dict[str, str]
 ) -> Dict[str, str]:
 
     # imports
-    from src.data_pipeline import DataPipeline
-    from src.utils.utils import Utils
     import logging
 
+    from src.data_pipeline import DataPipeline
+    from src.utils.utils import Utils
+
     # enable logging
-    Utils().configure_component_logging(log_level=logging.DEBUG)
+    Utils().configure_component_logging(log_level=logging.INFO)
 
     # run data pipeline
-    d = DataPipeline()
-    return d.run_data_pipeline(
+    return DataPipeline().run_data_pipeline(
         num_tests=num_tests,
         controller_params=controller_params,
         dynamics_params=dynamics_params,
-        gcs_bucket_name=gcs_bucket_name,
-        gcs_output_path=gcs_output_path,
+        gcs_file_paths=gcs_file_paths,
     )
+
+
+@dsl.component(base_image="gcr.io/zsc-personal/ml-cloud-pipeline:latest")
+def train_model(gcs_file_paths: Dict[str, str]) -> Dict[str, str]:
+
+    # imports
+    import logging
+    import torch
+
+    from src.model_trainer import ModelTrainer
+    from src.utils.utils import Utils
+
+    # enable logging
+    Utils().configure_component_logging(log_level=logging.INFO)
+    return ModelTrainer().train(show_plot=False, gcs_file_paths=gcs_file_paths)
 
 
 # define Kubeflow pipeline
 @dsl.pipeline(name="ml-cloud-pipeline")
 def pipeline():
-    data_pipeline_task = data_preparation_component(
-        num_tests=5,
-        controller_params={
-            "control_horizon": 1,
-            "prediction_horizon": 1,
-            "num_candidates": 50,
-            "num_iterations": 10,
-            "velocity_weight": 0.02,
-            "distance_weight": 2.5,
-            "data_collection": True,  # True for data collection; False for testing
-        },
-        dynamics_params={
-            "time_limit": 2.5,
-            "num_links": 2,
-            "link_mass": 0.1,
-            "link_length": 1,
-            "joint_viscous_friction": 0.1,
-            "dt": 0.01,
-            "dist_limit": [0.2, 0.3],
-        },
-        gcs_bucket_name="ml-cloud-kubeflow-pipeline-data",
-        gcs_output_path="training_data",
+    # Initialize arguments
+    gcs_file_paths = {
+        "bucket_name": "ml-cloud-kubeflow-pipeline-data",
+        "model_path": "models",
+        "eval_plot_path": "eval/plots",
+        "eval_data_path": "eval/data",
+        "training_data_path": "training_data",
+    }
+    controller_params = {
+        "control_horizon": 1,
+        "prediction_horizon": 1,
+        "num_candidates": 50,
+        "num_iterations": 10,
+        "velocity_weight": 0.02,
+        "distance_weight": 2.5,
+        "data_collection": True,  # True for data collection; False for testing
+    }
+    dynamics_params = {
+        "time_limit": 2.5,
+        "num_links": 2,
+        "link_mass": 0.1,
+        "link_length": 1,
+        "joint_viscous_friction": 0.1,
+        "dt": 0.01,
+        "dist_limit": [0.2, 0.3],
+    }
+    global_cache = False
+
+    # Run data pipline component
+    data_pipeline_task = data_preparation(
+        num_tests=1,
+        controller_params=controller_params,
+        dynamics_params=dynamics_params,
+        gcs_file_paths=gcs_file_paths,
     )
+    data_pipeline_task.set_caching_options(global_cache)
+
+    # Run model training component
+    model_train_task = train_model(gcs_file_paths=gcs_file_paths).after(data_pipeline_task)
+    model_train_task.set_caching_options(global_cache)
 
 
 class RunPipeline:
@@ -142,14 +169,13 @@ class RunPipeline:
             experiment_id = self.client.create_experiment(name=experiment_name).experiment_id
         return experiment_id
 
-    def run_pipeline(self, job_name, experiment_name, pipeline_id, pipeline_version_id, cache):
+    def run_kubeflow_pipeline(self, job_name, experiment_name, pipeline_id, pipeline_version_id):
         experiment_id = self.get_or_create_experiment(experiment_name)
         run = self.client.run_pipeline(
             job_name=job_name,
             experiment_id=experiment_id,
             pipeline_id=pipeline_id,
             version_id=pipeline_version_id,
-            enable_caching=cache,
         )
         logging.info(f"Pipeline submitted. Run ID: {run.run_id}")
 
@@ -163,7 +189,6 @@ if __name__ == "__main__":
     experiment_name = f"ml-cloud-data-experiment"
     host = "http://localhost:8080"
     service_account = "zsc-service-account@zsc-personal.iam.gserviceaccount.com"
-    cache = False
 
     # Job name versionion
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -174,4 +199,4 @@ if __name__ == "__main__":
     pipeline_id, pipeline_version_id = r.upload_pipeline(
         pipeline_name, pipeline_package_path, incrementor="minor"
     )
-    r.run_pipeline(job_name, experiment_name, pipeline_id, pipeline_version_id, cache)
+    r.run_kubeflow_pipeline(job_name, experiment_name, pipeline_id, pipeline_version_id)
