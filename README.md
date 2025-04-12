@@ -1,4 +1,4 @@
-# Installation Steps
+# Run Steps
 
 ## 1. Create a Kubernetes Cluster on GKE
 
@@ -80,7 +80,7 @@ kubectl port-forward -n kubeflow svc/ml-pipeline-ui 8080:80
 
 Then, visit `http://localhost:8080`. You should see no errors.
 
-## 3. Run the pipeline
+## 3. Run the Kubeflow pipeline
 
 First, compile the Dockerfile with the following commands:
 
@@ -90,6 +90,7 @@ docker buildx create --use
 
 # Build the first Docker image (with cache enabled). The GCP project and Image name are hard coded throughout the code. These will need to be replaced.
 docker buildx build \
+  --file Dockerfile.train \
   --platform linux/amd64 \
   --cache-to=type=registry,ref=gcr.io/zsc-personal/ml-cloud-pipeline:cache,mode=max \
   -t gcr.io/zsc-personal/ml-cloud-pipeline:latest \
@@ -106,3 +107,40 @@ Once you have confirmed that the Kubernetes cluster is working and you are able 
 3. Compile all code within the Kubeflow components and pipeline into a YAML file, stored in `yaml/ml_cloud_pipeline.yaml`.
 4. Generate a new Kubeflow pipeline and version based on the compiled YAML file, with the version being incremented (either major or minor version increment)
 5. Execute a run for the pipeline automatically. You can trigger subsequent runs in the UI.
+
+## 4. Deploy API
+
+The API code is present in `src.api.py`.  The deployment file is present in `yaml/k8s/deployment.yaml`. There are two separate Docker images, one for model training, `Dockerfile.train`, and one for model deployment, `Dockerfile.api`.  To deploy the API, ensure the default Kubernetes service account has the proper permissions, primarily related to Object Storage Admin for reading and writing to GCS.  These commands are commands that I had to run for ensuring my default service account was binded to the Kubernetes service account:
+
+```bash
+kubectl annotate serviceaccount default iam.gke.io/gcp-service-account=zsc-service-account@zsc-personal.iam.gserviceaccount.com
+
+gcloud iam service-accounts add-iam-policy-binding zsc-service-account@zsc-personal.iam.gserviceaccount.com \
+  --role roles/iam.workloadIdentityUser \
+  --member "serviceAccount:zsc-personal.svc.id.goog[default/default]"
+```
+
+Similar to the ML pipeline Docker image, we need to build the Docker image for the API (`Dockerfile.api`) with this command:
+
+```bash
+docker buildx build \
+  --file Dockerfile.api \
+  --platform linux/amd64 \
+  --cache-to=type=registry,ref=gcr.io/zsc-personal/ml-cloud-api:cache,mode=max \
+  -t gcr.io/zsc-personal/ml-cloud-api:latest \
+  --push .
+```
+
+Once ensuring the Kubernetes account has the proper permissions and a successful Docker image push, run the following commands to build the API Docker image (with cache) and deploy the API service on Kubernetes.
+
+```bash
+chmod +x deploy_api.sh
+
+./deploy_api.sh
+```
+
+This will output the external IP the API service is hosted on.  The command specifically is `kubectl get service ml-api-service`. Retrieve the external IP and run `curl http://<EXTERNAL_IP>/predict` to run the call the predict endpoint.
+
+## 5. Screenshots
+
+All screenshots are viewable in the `images` directory to demonstrate succesful data preparation, model training, model deployment, and model serving.
